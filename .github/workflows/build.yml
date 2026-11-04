@@ -1,4 +1,4 @@
-name: Universal Build (All CPUs & OS)
+name: Universal Build (Fixed)
 
 on:
   push:
@@ -11,34 +11,40 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # ۱. ویندوز ۶۴ بیتی استاندارد (Intel / AMD)
+          # ۱. ویندوز ۶۴ بیتی استاندارد
           - os: windows-latest
             arch: x64
+            py_ver: "3.11"
             artifact_name: YeReplacer-Windows-64bit
 
-          # ۲. ویندوز ۳۲ بیتی (قابل اجرا روی ویندوزهای قدیمی ۳۲ بیتی + ۶۴ بیتی)
+          # ۲. ویندوز ۳۲ بیتی (سازگار با ویندوز ۷، ۸، ۱۰ و ۱۱)
           - os: windows-latest
             arch: x86
+            py_ver: "3.8"
             artifact_name: YeReplacer-Windows-32bit-Universal
 
-          # ۳. ویندوز با پردازنده‌های ARM (مثل لپ‌تاپ‌های کوالکام اسنپدراگون)
+          # ۳. ویندوز ARM64
           - os: windows-11-arm
             arch: arm64
+            py_ver: "3.11"
             artifact_name: YeReplacer-Windows-ARM64
 
-          # ۴. مک با پردازنده‌های جدید اپل (M1 / M2 / M3 / M4)
+          # ۴. مک Apple Silicon (M1/M2/M3/M4)
           - os: macos-14
             arch: arm64
+            py_ver: "3.11"
             artifact_name: YeReplacer-macOS-AppleSilicon
 
-          # ۵. مک با پردازنده‌های قدیمی‌تر اینتل (Intel)
-          - os: macos-13
+          # ۵. مک Intel
+          - os: macos-15-intel
             arch: x64
+            py_ver: "3.11"
             artifact_name: YeReplacer-macOS-Intel
 
-          # ۶. لینوکس ۶۴ بیتی استاندارد
+          # ۶. لینوکس ۶۴ بیتی
           - os: ubuntu-latest
             arch: x64
+            py_ver: "3.11"
             artifact_name: YeReplacer-Linux-x64
 
     runs-on: ${{ matrix.os }}
@@ -47,10 +53,10 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Set up Python ${{ matrix.py_ver }}
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.py_ver }}
           architecture: ${{ matrix.arch }}
 
       - name: Install Tkinter on Linux
@@ -59,28 +65,36 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y python3-tk
 
-      - name: Download Vazirmatn Font Automatically
+      - name: Download Vazirmatn Font
+        shell: bash
         run: |
-          curl -L -o "Vazirmatn-Regular.ttf" "https://github.com/rastikerdar/vazirmatn/raw/master/fonts/ttf/Vazirmatn-Regular.ttf"
+          curl -L -s -o "Vazirmatn-Regular.ttf" "https://github.com/rastikerdar/vazirmatn/raw/master/fonts/ttf/Vazirmatn-Regular.ttf"
 
       - name: Install PyInstaller
-        run: pip install --upgrade pip pyinstaller
+        run: python -m pip install --upgrade pip pyinstaller
 
       - name: Build on Windows (${{ matrix.arch }})
         if: runner.os == 'Windows'
+        shell: bash
         run: |
-          pyinstaller --noconsole --onefile --name "YeReplacer" --add-data "Vazirmatn-Regular.ttf;." ye_replacer.py
+          SCRIPT=$(ls *.py | head -n 1)
+          echo "Building from $SCRIPT ..."
+          pyinstaller --noconsole --onefile --name "YeReplacer" --add-data "Vazirmatn-Regular.ttf;." "$SCRIPT"
 
       - name: Build on macOS (${{ matrix.arch }})
         if: runner.os == 'macOS'
         run: |
-          pyinstaller --noconsole --windowed --name "YeReplacer" --add-data "Vazirmatn-Regular.ttf:." ye_replacer.py
+          SCRIPT=$(ls *.py | head -n 1)
+          echo "Building from $SCRIPT ..."
+          pyinstaller --noconsole --windowed --name "YeReplacer" --add-data "Vazirmatn-Regular.ttf:." "$SCRIPT"
           hdiutil create -volname "YeReplacer" -srcfolder "dist/YeReplacer.app" -ov -format UDZO "dist/YeReplacer-macOS.dmg"
 
       - name: Build on Linux (${{ matrix.arch }})
         if: runner.os == 'Linux'
         run: |
-          pyinstaller --noconsole --onefile --name "YeReplacer" --add-data "Vazirmatn-Regular.ttf:." ye_replacer.py
+          SCRIPT=$(ls *.py | head -n 1)
+          echo "Building from $SCRIPT ..."
+          pyinstaller --noconsole --onefile --name "YeReplacer" --add-data "Vazirmatn-Regular.ttf:." "$SCRIPT"
           chmod +x dist/YeReplacer
 
       - name: Upload Compiled Executables
