@@ -1,0 +1,93 @@
+name: Universal Build (All CPUs & OS)
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ۱. ویندوز ۶۴ بیتی استاندارد (Intel / AMD)
+          - os: windows-latest
+            arch: x64
+            artifact_name: YeReplacer-Windows-64bit
+
+          # ۲. ویندوز ۳۲ بیتی (قابل اجرا روی ویندوزهای قدیمی ۳۲ بیتی + ۶۴ بیتی)
+          - os: windows-latest
+            arch: x86
+            artifact_name: YeReplacer-Windows-32bit-Universal
+
+          # ۳. ویندوز با پردازنده‌های ARM (مثل لپ‌تاپ‌های کوالکام اسنپدراگون)
+          - os: windows-11-arm
+            arch: arm64
+            artifact_name: YeReplacer-Windows-ARM64
+
+          # ۴. مک با پردازنده‌های جدید اپل (M1 / M2 / M3 / M4)
+          - os: macos-14
+            arch: arm64
+            artifact_name: YeReplacer-macOS-AppleSilicon
+
+          # ۵. مک با پردازنده‌های قدیمی‌تر اینتل (Intel)
+          - os: macos-13
+            arch: x64
+            artifact_name: YeReplacer-macOS-Intel
+
+          # ۶. لینوکس ۶۴ بیتی استاندارد
+          - os: ubuntu-latest
+            arch: x64
+            artifact_name: YeReplacer-Linux-x64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          architecture: ${{ matrix.arch }}
+
+      - name: Install Tkinter on Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk
+
+      - name: Download Vazirmatn Font Automatically
+        run: |
+          curl -L -o "Vazirmatn-Regular.ttf" "https://github.com/rastikerdar/vazirmatn/raw/master/fonts/ttf/Vazirmatn-Regular.ttf"
+
+      - name: Install PyInstaller
+        run: pip install --upgrade pip pyinstaller
+
+      - name: Build on Windows (${{ matrix.arch }})
+        if: runner.os == 'Windows'
+        run: |
+          pyinstaller --noconsole --onefile --name "YeReplacer" --add-data "Vazirmatn-Regular.ttf;." ye_replacer.py
+
+      - name: Build on macOS (${{ matrix.arch }})
+        if: runner.os == 'macOS'
+        run: |
+          pyinstaller --noconsole --windowed --name "YeReplacer" --add-data "Vazirmatn-Regular.ttf:." ye_replacer.py
+          hdiutil create -volname "YeReplacer" -srcfolder "dist/YeReplacer.app" -ov -format UDZO "dist/YeReplacer-macOS.dmg"
+
+      - name: Build on Linux (${{ matrix.arch }})
+        if: runner.os == 'Linux'
+        run: |
+          pyinstaller --noconsole --onefile --name "YeReplacer" --add-data "Vazirmatn-Regular.ttf:." ye_replacer.py
+          chmod +x dist/YeReplacer
+
+      - name: Upload Compiled Executables
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            dist/YeReplacer.exe
+            dist/YeReplacer-macOS.dmg
+            dist/YeReplacer
