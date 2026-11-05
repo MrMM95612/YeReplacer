@@ -1,9 +1,12 @@
-name: Universal Build (Fixed)
+name: Universal Build & Auto Release
 
 on:
   push:
     branches: [ "main", "master" ]
   workflow_dispatch:
+
+permissions:
+  contents: write  # مجوز ساخت اتوماتیک Release توسط خود گیت‌هاب
 
 jobs:
   build:
@@ -11,41 +14,41 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # ۱. ویندوز ۶۴ بیتی استاندارد
           - os: windows-latest
             arch: x64
             py_ver: "3.11"
             artifact_name: YeReplacer-Windows-64bit
+            out_file: YeReplacer-Windows-64bit.exe
 
-          # ۲. ویندوز ۳۲ بیتی (سازگار با ویندوز ۷، ۸، ۱۰ و ۱۱)
           - os: windows-latest
             arch: x86
             py_ver: "3.8"
             artifact_name: YeReplacer-Windows-32bit-Universal
+            out_file: YeReplacer-Windows-32bit-Universal.exe
 
-          # ۳. ویندوز ARM64
           - os: windows-11-arm
             arch: arm64
             py_ver: "3.11"
             artifact_name: YeReplacer-Windows-ARM64
+            out_file: YeReplacer-Windows-ARM64.exe
 
-          # ۴. مک Apple Silicon (M1/M2/M3/M4)
           - os: macos-14
             arch: arm64
             py_ver: "3.11"
             artifact_name: YeReplacer-macOS-AppleSilicon
+            out_file: YeReplacer-macOS-AppleSilicon.dmg
 
-          # ۵. مک Intel
           - os: macos-15-intel
             arch: x64
             py_ver: "3.11"
             artifact_name: YeReplacer-macOS-Intel
+            out_file: YeReplacer-macOS-Intel.dmg
 
-          # ۶. لینوکس ۶۴ بیتی
           - os: ubuntu-latest
             arch: x64
             py_ver: "3.11"
             artifact_name: YeReplacer-Linux-x64
+            out_file: YeReplacer-Linux-x64
 
     runs-on: ${{ matrix.os }}
 
@@ -78,30 +81,58 @@ jobs:
         shell: bash
         run: |
           SCRIPT=$(ls *.py | head -n 1)
-          echo "Building from $SCRIPT ..."
           pyinstaller --noconsole --onefile --name "YeReplacer" --add-data "Vazirmatn-Regular.ttf;." "$SCRIPT"
+          mv dist/YeReplacer.exe "dist/${{ matrix.out_file }}"
 
       - name: Build on macOS (${{ matrix.arch }})
         if: runner.os == 'macOS'
         run: |
           SCRIPT=$(ls *.py | head -n 1)
-          echo "Building from $SCRIPT ..."
           pyinstaller --noconsole --windowed --name "YeReplacer" --add-data "Vazirmatn-Regular.ttf:." "$SCRIPT"
-          hdiutil create -volname "YeReplacer" -srcfolder "dist/YeReplacer.app" -ov -format UDZO "dist/YeReplacer-macOS.dmg"
+          hdiutil create -volname "YeReplacer" -srcfolder "dist/YeReplacer.app" -ov -format UDZO "dist/${{ matrix.out_file }}"
 
       - name: Build on Linux (${{ matrix.arch }})
         if: runner.os == 'Linux'
         run: |
           SCRIPT=$(ls *.py | head -n 1)
-          echo "Building from $SCRIPT ..."
           pyinstaller --noconsole --onefile --name "YeReplacer" --add-data "Vazirmatn-Regular.ttf:." "$SCRIPT"
           chmod +x dist/YeReplacer
+          mv dist/YeReplacer "dist/${{ matrix.out_file }}"
 
       - name: Upload Compiled Executables
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          path: |
-            dist/YeReplacer.exe
-            dist/YeReplacer-macOS.dmg
-            dist/YeReplacer
+          path: dist/${{ matrix.out_file }}
+
+  # ── مرحله انتشار خودکار در بخش Releases بدون نیاز به آپلود دستی ──
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download All Built Files on Server
+        uses: actions/download-artifact@v4
+        with:
+          path: release_files
+          merge-multiple: true
+
+      - name: Publish to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v2.1
+          name: "YeReplacer v2.1 (Windows, macOS, Linux)"
+          discussion_category_name: "General"
+          body: |
+            ### 📥 دانلود نسخه آماده اجرا (بدون نیاز به نصب پایتون)
+            ابزار اصلاح کاراکتر «ی» و «ک» فارسی برای نرم‌افزارهای شرکت ادوبی (Photoshop, Premiere, After Effects, Illustrator) با فونت وزیرمتن.
+
+            **راهنمای انتخاب فایل مناسب سیستم شما:**
+            * 🪟 **ویندوز (تمام نسخه‌ها از ۷ تا ۱۱):** فایل `YeReplacer-Windows-32bit-Universal.exe` یا نسخه ۶۴ بیتی `YeReplacer-Windows-64bit.exe`
+            * 🍎 **مک با تراشه اپل (M1/M2/M3/M4):** فایل `YeReplacer-macOS-AppleSilicon.dmg`
+            * 🍏 **مک با تراشه اینتل (Intel):** فایل `YeReplacer-macOS-Intel.dmg`
+            * 🐧 **لینوکس (۶۴ بیتی):** فایل `YeReplacer-Linux-x64`
+
+            ---
+            💬 **نظرات، پیشنهادات و گزارش باگ:**
+            لطفاً در بخش **Discussion** پایین همین صفحه یا در تب **Issues** نظر خود را درباره عملکرد برنامه بنویسید!
+          files: release_files/*
